@@ -11,7 +11,7 @@ Allows for use of async / await in express middleware without worrying
 
 Use:
 
-```
+```ts
 import { promiseRouter } from '@tgriesser/promise-router'
 // Alternatively: const { promiseRouter } = require('@tgriesser/promise-router')
 
@@ -25,3 +25,7 @@ router.get('/some-route', async (req, res) => {
 
 app.use(router);
 ```
+
+#### License
+
+MIT

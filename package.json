@@ -4,6 +4,11 @@
   "description": "Express router ready for async/await in the route methods",
   "main": "lib/promise-router.js",
   "types": "lib/promise-router.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/tgriesser/promise-router.git"
+  },
   "scripts": {
     "clean": "rm -rf lib",
     "prepublish": "yarn run build",
