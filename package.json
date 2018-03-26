@@ -1,0 +1,23 @@
+{
+  "name": "@tgriesser/promise-router",
+  "version": "1.0.0",
+  "description": "Express router ready for async/await in the route methods",
+  "main": "lib/promise-router.js",
+  "types": "lib/promise-router.d.ts",
+  "scripts": {
+    "clean": "rm -rf lib",
+    "prepublish": "yarn run build",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "array-flatten": "1.1.1"
+  },
+  "peerDependencies": {
+    "express": ">=4.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.11.1",
+    "prettier": "^1.11.1",
+    "typescript": "^2.7.2"
+  }
+}
