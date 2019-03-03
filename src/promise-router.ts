@@ -3,7 +3,10 @@ import {
   Request,
   Response,
   NextFunction,
-  RouterOptions
+  RouterOptions,
+  RequestParamHandler,
+  RequestHandler,
+  ErrorRequestHandler
 } from "express";
 import { IRoute, PathParams } from "express-serve-static-core";
 // @ts-ignore
@@ -35,7 +38,13 @@ type RouteMethod =
   | "unlock"
   | "unsubscribe";
 
-type RouterMethod = RouteMethod | "use" | "connect" | "propfind" | "proppatch";
+type RouterMethod =
+  | RouteMethod
+  | "use"
+  | "connect"
+  | "propfind"
+  | "proppatch"
+  | "param";
 
 interface RequestHandlerArity2 {
   (req: Request, res: Response): any;
@@ -114,54 +123,72 @@ const ROUTER_METHODS: Array<RouterMethod> = [
 const isPromise = (val: any) =>
   typeof val === "object" && val !== null && typeof val.catch === "function";
 
-
-const wrappedArity2 = (middleware: RequestHandlerArity2) => (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+const wrappedArity2 = (
+  middleware: RequestHandlerArity2,
+  bindNext?: Function
+): RequestHandler => (req, res, next) => {
+  if (typeof bindNext === "function") {
+    next = bindNext(next);
+  }
   const val = middleware(req, res);
   if (isPromise(val)) {
     val.catch(next);
   }
 };
 
-const wrappedArity3 = (middleware: RequestHandlerArity3) => (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+const wrappedArity3 = (
+  middleware: RequestHandlerArity3,
+  bindNext?: Function
+): RequestHandler => (req, res, next) => {
+  if (typeof bindNext === "function") {
+    next = bindNext(next);
+  }
   const val = middleware(req, res, next);
   if (isPromise(val)) {
     val.catch(next);
   }
 };
 
-const wrappedArity4 = (middleware: RequestHandlerArity4) => (
-  err: any,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+const wrappedArity4 = (
+  middleware: RequestHandlerArity4,
+  bindNext?: Function
+): ErrorRequestHandler => (err, req, res, next) => {
+  if (typeof bindNext === "function") {
+    next = bindNext(next);
+  }
   const val = middleware(err, req, res, next);
   if (isPromise(val)) {
     val.catch(next);
   }
 };
 
+const wrapParam = (
+  middleware: RequestParamHandler,
+  bindNext?: Function
+): RequestParamHandler => (req, res, next, value, name) => {
+  if (typeof bindNext === "function") {
+    next = bindNext(next);
+  }
+  const val = middleware(req, res, next, value, name);
+  if (isPromise(val)) {
+    val.catch(next);
+  }
+};
+
 function wrapMiddleware(
-  middleware: PromiseRequestHandler
+  middleware: PromiseRequestHandler,
+  bindNext?: Function
 ) {
   switch (middleware.length) {
     case 3:
-      return wrappedArity3(middleware as RequestHandlerArity3);
+      return wrappedArity3(middleware as RequestHandlerArity3, bindNext);
     case 4:
-      return wrappedArity4(middleware as RequestHandlerArity4);
+      return wrappedArity4(middleware as RequestHandlerArity4, bindNext);
   }
-  return wrappedArity2(middleware as RequestHandlerArity2);
+  return wrappedArity2(middleware as RequestHandlerArity2, bindNext);
 }
 
-function bindRouteMethods(rtr: IRoute) {
+function bindRouteMethods(rtr: IRoute, bindNext?: Function) {
   ROUTE_METHODS.forEach(method => {
     const originalMethod = rtr[method];
     rtr[method] = function wrappedMethod(...args: any[]) {
@@ -171,7 +198,7 @@ function bindRouteMethods(rtr: IRoute) {
           if ((i === 0 && typeof arg === "string") || arg instanceof RegExp) {
             return arg;
           }
-          return wrapMiddleware(arg);
+          return wrapMiddleware(arg, bindNext);
         })
       );
     };
@@ -179,17 +206,28 @@ function bindRouteMethods(rtr: IRoute) {
   return rtr;
 }
 
-function bindRouterMethods(rtr: Router) {
+function bindRouterMethods(rtr: Router, bindNext?: Function) {
   ROUTER_METHODS.forEach(method => {
     const originalMethod = rtr[method];
     rtr[method] = function wrappedMethod(...args: any[]) {
+      if (method === "param") {
+        return originalMethod.apply(
+          this,
+          flatten(args).map((arg: any, i: number) => {
+            if ((i === 0 && typeof arg === "string") || arg instanceof RegExp) {
+              return arg;
+            }
+            return wrapParam(arg, bindNext);
+          })
+        );
+      }
       return originalMethod.apply(
         this,
         flatten(args).map((arg: any, i: number) => {
           if ((i === 0 && typeof arg === "string") || arg instanceof RegExp) {
             return arg;
           }
-          return wrapMiddleware(arg);
+          return wrapMiddleware(arg, bindNext);
         })
       );
     };
@@ -197,15 +235,19 @@ function bindRouterMethods(rtr: Router) {
   return rtr;
 }
 
-export function promiseRouter(routerOptions?: RouterOptions): Router {
-  const rtr = Router(routerOptions);
+export interface PromiseRouterOptions extends RouterOptions {
+  bindNext?: Function;
+}
+
+export function promiseRouter(
+  routerOptions: PromiseRouterOptions = {}
+): Router {
+  const { bindNext, ...opts } = routerOptions;
+  const rtr = Router(opts);
   const originalRoute = rtr.route;
   rtr.route = function wrappedRoute(path: PathParams) {
     const route: IRoute = originalRoute.call(this, path);
-    return bindRouteMethods(route);
+    return bindRouteMethods(route, bindNext);
   };
-  rtr.param = function() {
-    throw new Error('promiseRouter.param is not supported, use app.param')
-  }
-  return bindRouterMethods(rtr);
+  return bindRouterMethods(rtr, bindNext);
 }
