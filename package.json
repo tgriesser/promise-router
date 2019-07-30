@@ -1,6 +1,6 @@
 {
   "name": "@tgriesser/promise-router",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Express router ready for async/await in the route methods",
   "main": "lib/promise-router.js",
   "types": "lib/promise-router.d.ts",

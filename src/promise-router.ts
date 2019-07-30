@@ -123,72 +123,74 @@ const ROUTER_METHODS: Array<RouterMethod> = [
 const isPromise = (val: any) =>
   typeof val === "object" && val !== null && typeof val.catch === "function";
 
-const wrappedArity2 = (
-  middleware: RequestHandlerArity2,
-  bindNext?: Function
-): RequestHandler => (req, res, next) => {
-  if (typeof bindNext === "function") {
-    next = bindNext(next);
-  }
-  const val = middleware(req, res);
-  if (isPromise(val)) {
-    val.catch(next);
-  }
+const wrappedArity2 = (middleware: RequestHandlerArity2): RequestHandler => {
+  const middlewareName = middleware.name || "<anonymous>";
+  const obj: Record<string, RequestHandler> = {
+    [middlewareName](req, res, next) {
+      const val = middleware(req, res);
+      if (isPromise(val)) {
+        val.catch(next);
+      }
+    }
+  };
+  return obj[middlewareName];
 };
 
-const wrappedArity3 = (
-  middleware: RequestHandlerArity3,
-  bindNext?: Function
-): RequestHandler => (req, res, next) => {
-  if (typeof bindNext === "function") {
-    next = bindNext(next);
-  }
-  const val = middleware(req, res, next);
-  if (isPromise(val)) {
-    val.catch(next);
-  }
+const wrappedArity3 = (middleware: RequestHandlerArity3): RequestHandler => {
+  const middlewareName = middleware.name || "<anonymous>";
+  const obj: Record<string, RequestHandler> = {
+    [middlewareName](req, res, next) {
+      const val = middleware(req, res, next);
+      if (isPromise(val)) {
+        val.catch(next);
+      }
+    }
+  };
+  return obj[middlewareName];
 };
 
 const wrappedArity4 = (
-  middleware: RequestHandlerArity4,
-  bindNext?: Function
-): ErrorRequestHandler => (err, req, res, next) => {
-  if (typeof bindNext === "function") {
-    next = bindNext(next);
-  }
-  const val = middleware(err, req, res, next);
-  if (isPromise(val)) {
-    val.catch(next);
-  }
+  middleware: RequestHandlerArity4
+): ErrorRequestHandler => {
+  const middlewareName = middleware.name || "<anonymous>";
+  const obj: Record<string, ErrorRequestHandler> = {
+    [middlewareName](err, req, res, next) {
+      const val = middleware(err, req, res, next);
+      if (isPromise(val)) {
+        val.catch(next);
+      }
+    }
+  };
+  return obj[middlewareName];
 };
 
-const wrapParam = (
-  middleware: RequestParamHandler,
-  bindNext?: Function
-): RequestParamHandler => (req, res, next, value, name) => {
-  if (typeof bindNext === "function") {
-    next = bindNext(next);
-  }
-  const val = middleware(req, res, next, value, name);
-  if (isPromise(val)) {
-    val.catch(next);
-  }
+const wrapParam = (middleware: RequestParamHandler): RequestParamHandler => {
+  const middlewareName = middleware.name || "<anonymous>";
+  const obj: Record<string, RequestParamHandler> = {
+    [middlewareName](req, res, next, value, name) {
+      const val = middleware(req, res, next, value, name);
+      if (isPromise(val)) {
+        val.catch(next);
+      }
+    }
+  };
+  return obj[middlewareName];
 };
 
-function wrapMiddleware(
-  middleware: PromiseRequestHandler,
-  bindNext?: Function
-) {
+function wrapMiddleware(middleware: PromiseRequestHandler) {
+  if (!middleware) {
+    return wrappedArity2(middleware);
+  }
   switch (middleware.length) {
     case 3:
-      return wrappedArity3(middleware as RequestHandlerArity3, bindNext);
+      return wrappedArity3(middleware as RequestHandlerArity3);
     case 4:
-      return wrappedArity4(middleware as RequestHandlerArity4, bindNext);
+      return wrappedArity4(middleware as RequestHandlerArity4);
   }
-  return wrappedArity2(middleware as RequestHandlerArity2, bindNext);
+  return wrappedArity2(middleware as RequestHandlerArity2);
 }
 
-function bindRouteMethods(rtr: IRoute, bindNext?: Function) {
+function bindRouteMethods(rtr: IRoute) {
   ROUTE_METHODS.forEach(method => {
     const originalMethod = rtr[method];
     rtr[method] = function wrappedMethod(...args: any[]) {
@@ -198,7 +200,7 @@ function bindRouteMethods(rtr: IRoute, bindNext?: Function) {
           if ((i === 0 && typeof arg === "string") || arg instanceof RegExp) {
             return arg;
           }
-          return wrapMiddleware(arg, bindNext);
+          return wrapMiddleware(arg);
         })
       );
     };
@@ -206,7 +208,7 @@ function bindRouteMethods(rtr: IRoute, bindNext?: Function) {
   return rtr;
 }
 
-function bindRouterMethods(rtr: Router, bindNext?: Function) {
+function bindRouterMethods(rtr: Router) {
   ROUTER_METHODS.forEach(method => {
     const originalMethod = rtr[method];
     rtr[method] = function wrappedMethod(...args: any[]) {
@@ -217,7 +219,7 @@ function bindRouterMethods(rtr: Router, bindNext?: Function) {
             if ((i === 0 && typeof arg === "string") || arg instanceof RegExp) {
               return arg;
             }
-            return wrapParam(arg, bindNext);
+            return wrapParam(arg);
           })
         );
       }
@@ -227,7 +229,7 @@ function bindRouterMethods(rtr: Router, bindNext?: Function) {
           if ((i === 0 && typeof arg === "string") || arg instanceof RegExp) {
             return arg;
           }
-          return wrapMiddleware(arg, bindNext);
+          return wrapMiddleware(arg);
         })
       );
     };
@@ -235,19 +237,12 @@ function bindRouterMethods(rtr: Router, bindNext?: Function) {
   return rtr;
 }
 
-export interface PromiseRouterOptions extends RouterOptions {
-  bindNext?: Function;
-}
-
-export function promiseRouter(
-  routerOptions: PromiseRouterOptions = {}
-): Router {
-  const { bindNext, ...opts } = routerOptions;
-  const rtr = Router(opts);
+export function promiseRouter(routerOptions: RouterOptions = {}): Router {
+  const rtr = Router(routerOptions);
   const originalRoute = rtr.route;
   rtr.route = function wrappedRoute(path: PathParams) {
     const route: IRoute = originalRoute.call(this, path);
-    return bindRouteMethods(route, bindNext);
+    return bindRouteMethods(route);
   };
-  return bindRouterMethods(rtr, bindNext);
+  return bindRouterMethods(rtr);
 }
