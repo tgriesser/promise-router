@@ -11,8 +11,10 @@
   },
   "scripts": {
     "clean": "rm -rf lib",
-    "prepublish": "yarn run build",
-    "build": "tsc"
+    "prepublish": "yarn run build && yarn test",
+    "build": "tsc",
+    "test": "jest",
+    "test:debug": "node --inspect-brk ./node_modules/.bin/jest"
   },
   "dependencies": {
     "array-flatten": "1.1.1"
@@ -21,8 +23,15 @@
     "express": ">=4.0"
   },
   "devDependencies": {
+    "express": "^4.17.1",
+    "@types/node": "12.12.2",
     "@types/express": "^4.11.1",
-    "prettier": "^1.11.1",
-    "typescript": "^2.7.2"
+    "@types/jest": "^25.2.3",
+    "@types/supertest": "^2.0.9",
+    "prettier": "^2.0.5",
+    "typescript": "^3.9.3",
+    "supertest": "4.0.2",
+    "jest": "26.0.1",
+    "ts-jest": "^26.0.0"
   }
 }

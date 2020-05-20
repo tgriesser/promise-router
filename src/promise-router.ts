@@ -6,11 +6,11 @@ import {
   RouterOptions,
   RequestParamHandler,
   RequestHandler,
-  ErrorRequestHandler
+  ErrorRequestHandler,
 } from "express";
 import { IRoute, PathParams } from "express-serve-static-core";
 // @ts-ignore
-import * as flatten from "array-flatten";
+import flatten from "array-flatten";
 
 type RouteMethod =
   | "all"
@@ -86,7 +86,7 @@ const ROUTE_METHODS: Array<RouteMethod> = [
   "subscribe",
   "trace",
   "unlock",
-  "unsubscribe"
+  "unsubscribe",
 ];
 
 const ROUTER_METHODS: Array<RouterMethod> = [
@@ -117,7 +117,7 @@ const ROUTER_METHODS: Array<RouterMethod> = [
   "subscribe",
   "trace",
   "unlock",
-  "unsubscribe"
+  "unsubscribe",
 ];
 
 const isPromise = (val: any) =>
@@ -131,7 +131,7 @@ const wrappedArity2 = (middleware: RequestHandlerArity2): RequestHandler => {
       if (isPromise(val)) {
         val.catch(next);
       }
-    }
+    },
   };
   return obj[middlewareName];
 };
@@ -144,7 +144,7 @@ const wrappedArity3 = (middleware: RequestHandlerArity3): RequestHandler => {
       if (isPromise(val)) {
         val.catch(next);
       }
-    }
+    },
   };
   return obj[middlewareName];
 };
@@ -159,7 +159,7 @@ const wrappedArity4 = (
       if (isPromise(val)) {
         val.catch(next);
       }
-    }
+    },
   };
   return obj[middlewareName];
 };
@@ -172,7 +172,7 @@ const wrapParam = (middleware: RequestParamHandler): RequestParamHandler => {
       if (isPromise(val)) {
         val.catch(next);
       }
-    }
+    },
   };
   return obj[middlewareName];
 };
@@ -190,38 +190,22 @@ function wrapMiddleware(middleware: PromiseRequestHandler) {
   return wrappedArity2(middleware as RequestHandlerArity2);
 }
 
-function bindRouteMethods(rtr: IRoute) {
-  ROUTE_METHODS.forEach(method => {
+function bindRouteMethods(rtr: IRoute, prependRoutes?: RequestHandler) {
+  ROUTE_METHODS.forEach((method) => {
     const originalMethod = rtr[method];
     rtr[method] = function wrappedMethod(...args: any[]) {
-      return originalMethod.apply(
-        this,
-        flatten(args).map((arg: any, i: number) => {
-          if ((i === 0 && typeof arg === "string") || arg instanceof RegExp) {
-            return arg;
+      if (prependRoutes) {
+        if (
+          method === "get" ||
+          method === "put" ||
+          method === "post" ||
+          method === "delete"
+        ) {
+          if (typeof args[0] === "string" || args[0] instanceof RegExp) {
+            const [first, ...rest] = args;
+            args = [first, prependRoutes, ...rest];
           }
-          return wrapMiddleware(arg);
-        })
-      );
-    };
-  });
-  return rtr;
-}
-
-function bindRouterMethods(rtr: Router) {
-  ROUTER_METHODS.forEach(method => {
-    const originalMethod = rtr[method];
-    rtr[method] = function wrappedMethod(...args: any[]) {
-      if (method === "param") {
-        return originalMethod.apply(
-          this,
-          flatten(args).map((arg: any, i: number) => {
-            if ((i === 0 && typeof arg === "string") || arg instanceof RegExp) {
-              return arg;
-            }
-            return wrapParam(arg);
-          })
-        );
+        }
       }
       return originalMethod.apply(
         this,
@@ -237,12 +221,63 @@ function bindRouterMethods(rtr: Router) {
   return rtr;
 }
 
-export function promiseRouter(routerOptions: RouterOptions = {}): Router {
+function bindRouterMethods(rtr: Router, prependRoutes?: RequestHandler) {
+  ROUTER_METHODS.forEach((method) => {
+    const originalMethod = rtr[method];
+    rtr[method] = function wrappedMethod(...args: any[]) {
+      if (method === "param") {
+        return originalMethod.apply(
+          this,
+          flatten(args).map((arg: any, i: number) => {
+            if ((i === 0 && typeof arg === "string") || arg instanceof RegExp) {
+              return arg;
+            }
+            return wrapParam(arg);
+          })
+        );
+      }
+      if (prependRoutes) {
+        if (
+          method === "get" ||
+          method === "put" ||
+          method === "post" ||
+          method === "delete"
+        ) {
+          if (typeof args[0] === "string" || args[0] instanceof RegExp) {
+            const [first, ...rest] = args;
+            args = [first, prependRoutes, ...rest];
+          }
+        }
+      }
+      return originalMethod.apply(
+        this,
+        flatten(args).map((arg: any, i: number) => {
+          if ((i === 0 && typeof arg === "string") || arg instanceof RegExp) {
+            return arg;
+          }
+          return wrapMiddleware(arg);
+        })
+      );
+    };
+  });
+  return rtr;
+}
+
+interface PromiseRouterOptions extends RouterOptions {
+  /**
+   * Prepends a handler before "get" / "post" / "put" / "delete"
+   */
+  prependRoutes?: RequestHandler;
+}
+
+export function promiseRouter(
+  routerOptions: PromiseRouterOptions = {}
+): Router {
   const rtr = Router(routerOptions);
   const originalRoute = rtr.route;
   rtr.route = function wrappedRoute(path: PathParams) {
     const route: IRoute = originalRoute.call(this, path);
-    return bindRouteMethods(route);
+    return bindRouteMethods(route, routerOptions.prependRoutes);
   };
-  return bindRouterMethods(rtr);
+  return bindRouterMethods(rtr, routerOptions.prependRoutes);
 }
